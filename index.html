@@ -95,10 +95,16 @@
     font-weight:560; font-size:clamp(2.1rem, 4.6vw, 3.4rem);
     line-height:1.08; letter-spacing:-0.01em; margin:0 0 10px; max-width:16ch;
   }
-  h1.title .accent{color:var(--over); font-style:italic; font-weight:420;}
+  h1.title .accent{color:var(--over); font-style:normal; font-weight:420;}
+  .fulltitle{
+    position:relative; z-index:1;
+    font-family:'Fraunces',serif; font-weight:420; font-style:italic;
+    font-size:clamp(1.05rem, 2vw, 1.4rem); color:#c7cbd1; max-width:34ch;
+    line-height:1.32; margin:0 0 16px; letter-spacing:-0.005em;
+  }
   .subtitle{
     position:relative; z-index:1;
-    font-size:clamp(1rem, 1.6vw, 1.18rem); color:var(--ink-dim); max-width:52ch; margin:0 0 34px; font-weight:400;
+    font-size:clamp(0.94rem, 1.4vw, 1.05rem); color:var(--ink-dim); max-width:52ch; margin:0 0 34px; font-weight:400;
   }
   .authors{
     position:relative; z-index:1;
@@ -239,8 +245,9 @@
       <span class="venue-tag">ECCV 2026</span>
       <span>Low-Level Vision &middot; HDR Imaging &middot; Gain Map Inverse Tone Mapping</span>
     </div>
-    <h1 class="title">Dual&#8209;Output Multi&#8209;Exposure HDR <span class="accent">Reconstruction</span></h1>
-    <p class="subtitle">via SDR Fusion and Gain Map Inverse Tone Mapping — one framework that jointly produces a display-ready SDR image and its consistent HDR counterpart from three bracketed exposures.</p>
+    <h1 class="title">DOME<span class="accent">&#8209;</span>HDR</h1>
+    <p class="fulltitle">Dual&#8209;Output Multi&#8209;Exposure HDR Reconstruction via SDR Fusion and Gain Map Inverse Tone Mapping</p>
+    <p class="subtitle">One framework that jointly produces a display-ready SDR image and its consistent HDR counterpart from three bracketed exposures.</p>
 
     <div class="authors">
       <span>Jinho&nbsp;Kim</span><span>Jinwoo&nbsp;Kim</span><span>Seon&nbsp;Joo&nbsp;Kim</span>
