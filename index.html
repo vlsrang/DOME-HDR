@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DOME-HDR — Dual-Output Multi-Exposure HDR Reconstruction</title>
+<meta name="description" content="DOME-HDR: Dual-Output Multi-Exposure HDR Reconstruction via SDR Fusion and Gain Map Inverse Tone Mapping. ECCV 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,420;9..144,560;9..144,650&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0c0f;
+    --bg-elevated:#12151a;
+    --bg-card:#161a20;
+    --line:rgba(255,255,255,0.09);
+    --line-soft:rgba(255,255,255,0.05);
+    --ink:#eef0f2;
+    --ink-dim:#9aa2ad;
+    --ink-faint:#5c636c;
+    --under:#4f8dff;   /* under-exposure / shadow */
+    --mid:#f2ede2;     /* mid-exposure / neutral paper */
+    --over:#ff9d4d;    /* over-exposure / highlight */
+    --accent:#ff9d4d;
+    --radius:3px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    font-size:16px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion: reduce){
+    html{scroll-behavior:auto;}
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important;}
+  }
+  a{color:inherit;}
+  .display{font-family:'Fraunces',serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .wrap{max-width:1080px; margin:0 auto; padding:0 28px;}
+  ::selection{background:var(--over); color:#0a0c0f;}
+  :focus-visible{outline:2px solid var(--over); outline-offset:3px;}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50;
+    background:rgba(10,12,15,0.82);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line-soft);
+  }
+  nav .wrap{display:flex; align-items:center; justify-content:space-between; height:56px;}
+  .navmark{display:flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:13px; letter-spacing:0.02em; color:var(--ink);}
+  .navmark .dots{display:flex; gap:3px;}
+  .navmark .dot{width:7px; height:7px; border-radius:1px;}
+  .navmark .dot:nth-child(1){background:var(--under);}
+  .navmark .dot:nth-child(2){background:var(--mid);}
+  .navmark .dot:nth-child(3){background:var(--over);}
+  .navlinks{display:flex; gap:26px; font-size:13.5px; color:var(--ink-dim);}
+  .navlinks a{text-decoration:none; transition:color .15s;}
+  .navlinks a:hover{color:var(--ink);}
+  @media (max-width:640px){ .navlinks{display:none;} }
+
+  /* ---------- HERO ---------- */
+  header.hero{
+    position:relative;
+    padding:96px 0 64px;
+    overflow:hidden;
+    border-bottom:1px solid var(--line-soft);
+  }
+  .bands{
+    position:absolute; inset:0; z-index:0; opacity:0.55;
+  }
+  .band{position:absolute; left:0; right:0; height:34%; filter:blur(60px);}
+  .band.b-under{top:-6%; background:radial-gradient(ellipse at 20% 40%, rgba(79,141,255,0.28), transparent 65%);}
+  .band.b-mid{top:33%; background:radial-gradient(ellipse at 60% 50%, rgba(242,237,226,0.10), transparent 65%);}
+  .band.b-over{top:66%; background:radial-gradient(ellipse at 80% 60%, rgba(255,157,77,0.28), transparent 65%);}
+
+  .venue-row{
+    position:relative; z-index:1;
+    display:flex; align-items:center; gap:12px; margin-bottom:26px;
+    font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--ink-dim);
+  }
+  .venue-tag{
+    border:1px solid var(--line); padding:4px 10px; border-radius:2px;
+    color:var(--over); letter-spacing:0.04em;
+  }
+  h1.title{
+    position:relative; z-index:1;
+    font-family:'Fraunces',serif; font-optical-sizing:auto;
+    font-weight:560; font-size:clamp(2.1rem, 4.6vw, 3.4rem);
+    line-height:1.08; letter-spacing:-0.01em; margin:0 0 10px; max-width:16ch;
+  }
+  h1.title .accent{color:var(--over); font-style:italic; font-weight:420;}
+  .subtitle{
+    position:relative; z-index:1;
+    font-size:clamp(1rem, 1.6vw, 1.18rem); color:var(--ink-dim); max-width:52ch; margin:0 0 34px; font-weight:400;
+  }
+  .authors{
+    position:relative; z-index:1;
+    display:flex; flex-wrap:wrap; gap:6px 18px; align-items:baseline; margin-bottom:8px; font-size:15px;
+  }
+  .authors .aff{color:var(--ink-faint); font-size:13.5px; margin-bottom:38px; position:relative; z-index:1;}
+  .cta-row{position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:12px; margin-top:8px;}
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    padding:10px 18px; border-radius:2px; font-size:14px; font-weight:500;
+    text-decoration:none; border:1px solid var(--line); transition:all .15s;
+  }
+  .btn svg{width:15px; height:15px; flex:none;}
+  .btn.primary{background:var(--ink); color:var(--bg); border-color:var(--ink);}
+  .btn.primary:hover{background:var(--over); border-color:var(--over);}
+  .btn.ghost{color:var(--ink-dim);}
+  .btn.ghost:hover{color:var(--ink); border-color:var(--ink-dim);}
+
+  /* ---------- GAIN MAP HERO GRAPHIC ---------- */
+  .heroGraphic{
+    position:relative; z-index:1; margin-top:56px;
+    border:1px solid var(--line); border-radius:4px; background:var(--bg-elevated);
+    padding:22px 22px 18px;
+  }
+  .heroGraphic .cap{font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-faint); margin-top:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
+  .heroGraphic .cap b{color:var(--ink-dim); font-weight:500;}
+
+  /* ---------- SECTION SCAFFOLD ---------- */
+  section{padding:72px 0; border-bottom:1px solid var(--line-soft);}
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--over);
+    letter-spacing:0.12em; text-transform:uppercase; margin-bottom:10px; display:block;
+  }
+  h2.h{
+    font-family:'Fraunces',serif; font-weight:500; font-size:clamp(1.5rem,2.6vw,2rem);
+    margin:0 0 22px; letter-spacing:-0.01em;
+  }
+  .lede{font-size:1.05rem; color:var(--ink-dim); max-width:74ch; margin:0 0 8px;}
+
+  /* ---------- ABSTRACT ---------- */
+  .abstract-box{
+    border-left:2px solid var(--over); padding-left:24px; margin-top:20px;
+    font-size:1.02rem; color:#d7dade; max-width:76ch;
+  }
+
+  /* ---------- PIPELINE ---------- */
+  .pipeline{display:grid; grid-template-columns:1fr; gap:16px; margin-top:28px;}
+  @media(min-width:820px){ .pipeline{grid-template-columns:1fr 1fr;} }
+  .stage{
+    background:var(--bg-card); border:1px solid var(--line); border-radius:4px; padding:24px;
+  }
+  .stage .num{font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-faint); letter-spacing:0.06em;}
+  .stage h3{font-family:'Fraunces',serif; font-weight:500; font-size:1.25rem; margin:6px 0 10px;}
+  .stage p{color:var(--ink-dim); font-size:14.5px; margin:0 0 14px;}
+  .chipRow{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{
+    font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--ink-dim);
+    border:1px solid var(--line); padding:4px 9px; border-radius:2px;
+  }
+
+  /* equation card */
+  .eq{
+    background:var(--bg-elevated); border:1px solid var(--line); border-radius:4px;
+    padding:18px 22px; margin:18px 0; font-family:'JetBrains Mono',monospace; font-size:14.5px; color:#dfe3e7;
+    overflow-x:auto;
+  }
+  .eq .lbl{color:var(--ink-faint); font-size:12px; float:right;}
+
+  /* ---------- RESULTS TABLE ---------- */
+  .tableScroll{overflow-x:auto; margin-top:24px; border:1px solid var(--line); border-radius:4px;}
+  table{border-collapse:collapse; width:100%; min-width:640px; font-size:13.5px;}
+  thead th{
+    text-align:left; font-family:'JetBrains Mono',monospace; font-weight:500; font-size:11.5px;
+    color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.06em;
+    padding:12px 16px; border-bottom:1px solid var(--line); white-space:nowrap;
+  }
+  tbody td{padding:11px 16px; border-bottom:1px solid var(--line-soft); font-family:'JetBrains Mono',monospace; color:var(--ink-dim); white-space:nowrap;}
+  tbody td:first-child{font-family:'Inter',sans-serif; color:var(--ink);}
+  tbody tr.best td{color:var(--ink); background:rgba(255,157,77,0.06);}
+  tbody tr.best td:first-child{color:var(--over); font-weight:600;}
+  .tblnote{font-size:12.5px; color:var(--ink-faint); margin-top:10px;}
+
+  /* ---------- ABLATIONS ---------- */
+  .ablGrid{display:grid; grid-template-columns:1fr; gap:14px; margin-top:24px;}
+  @media(min-width:760px){ .ablGrid{grid-template-columns:1fr 1fr;} }
+  .ablCard{border:1px solid var(--line); border-radius:4px; padding:18px 20px; background:var(--bg-card);}
+  .ablCard h4{margin:0 0 6px; font-size:14.5px; font-weight:600;}
+  .ablCard p{margin:0; font-size:13.5px; color:var(--ink-dim);}
+  .ablCard .stat{font-family:'JetBrains Mono',monospace; color:var(--over); font-size:13px; margin-top:8px; display:block;}
+
+  /* ---------- LIMITATION ---------- */
+  .noteBox{
+    border:1px dashed var(--line); border-radius:4px; padding:20px 22px; margin-top:20px;
+    color:var(--ink-dim); font-size:14.5px; max-width:76ch;
+  }
+
+  /* ---------- BIBTEX ---------- */
+  .bibtex{
+    background:var(--bg-elevated); border:1px solid var(--line); border-radius:4px;
+    padding:22px; font-family:'JetBrains Mono',monospace; font-size:12.8px; line-height:1.7;
+    color:#c7cbd1; overflow-x:auto; white-space:pre; position:relative;
+  }
+  .copyBtn{
+    position:absolute; top:14px; right:14px; font-family:'Inter',sans-serif; font-size:12px;
+    background:transparent; color:var(--ink-dim); border:1px solid var(--line); padding:5px 10px;
+    border-radius:2px; cursor:pointer; transition:all .15s;
+  }
+  .copyBtn:hover{color:var(--ink); border-color:var(--ink-dim);}
+
+  footer{padding:48px 0 64px; text-align:center;}
+  footer p{color:var(--ink-faint); font-size:13px; margin:4px 0;}
+  footer a{color:var(--ink-dim); text-decoration:underline; text-underline-offset:3px;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="navmark"><span class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></span> DOME&#8209;HDR</div>
+    <div class="navlinks">
+      <a href="#abstract">Abstract</a>
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#ablations">Ablations</a>
+      <a href="#bibtex">BibTeX</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="bands" aria-hidden="true">
+    <div class="band b-under"></div>
+    <div class="band b-mid"></div>
+    <div class="band b-over"></div>
+  </div>
+  <div class="wrap">
+    <div class="venue-row">
+      <span class="venue-tag">ECCV 2026</span>
+      <span>Low-Level Vision &middot; HDR Imaging &middot; Gain Map Inverse Tone Mapping</span>
+    </div>
+    <h1 class="title">Dual&#8209;Output Multi&#8209;Exposure HDR <span class="accent">Reconstruction</span></h1>
+    <p class="subtitle">via SDR Fusion and Gain Map Inverse Tone Mapping — one framework that jointly produces a display-ready SDR image and its consistent HDR counterpart from three bracketed exposures.</p>
+
+    <div class="authors">
+      <span>Jinho&nbsp;Kim</span><span>Jinwoo&nbsp;Kim</span><span>Seon&nbsp;Joo&nbsp;Kim</span>
+    </div>
+    <div class="aff">Yonsei University, Republic of Korea</div>
+
+    <div class="cta-row">
+      <a class="btn primary" href="#" aria-label="Read the paper (placeholder link)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 2h9l5 5v15H6z"/><path d="M15 2v5h5"/></svg>
+        Paper
+      </a>
+      <a class="btn ghost" href="#" aria-label="View code on GitHub (placeholder link)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.98 5.24.98 11.5c0 5.02 3.26 9.28 7.78 10.78.57.1.78-.25.78-.55v-2.1c-3.16.69-3.83-1.36-3.83-1.36-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.75 1.18 1.75 1.18 1.02 1.75 2.68 1.24 3.33.95.1-.74.4-1.24.72-1.53-2.52-.29-5.17-1.26-5.17-5.6 0-1.24.44-2.25 1.17-3.04-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.16a10.9 10.9 0 0 1 5.74 0c2.19-1.47 3.15-1.16 3.15-1.16.62 1.57.23 2.73.11 3.02.73.79 1.17 1.8 1.17 3.04 0 4.35-2.66 5.31-5.19 5.59.41.35.77 1.04.77 2.1v3.11c0 .3.21.66.79.55A11.03 11.03 0 0 0 23.02 11.5C23.02 5.24 18.27.5 12 .5z"/></svg>
+        Code
+      </a>
+      <a class="btn ghost" href="#" aria-label="arXiv preprint (placeholder link)">arXiv</a>
+      <a class="btn ghost" href="#results">Results ↓</a>
+    </div>
+
+    <div class="heroGraphic">
+      <svg viewBox="0 0 900 220" width="100%" height="auto" role="img" aria-label="Diagram of three exposure brackets fusing into an SDR image and a gain map, which combine into an HDR output.">
+        <!-- three exposure bars -->
+        <g font-family="JetBrains Mono, monospace" font-size="10.5" fill="#5c636c">
+          <rect x="0" y="18" width="150" height="46" rx="2" fill="#12151a" stroke="#4f8dff" stroke-opacity="0.5"/>
+          <text x="10" y="12">UNDER-EXPOSED</text>
+          <rect x="0" y="86" width="150" height="46" rx="2" fill="#1a1c20" stroke="#f2ede2" stroke-opacity="0.35"/>
+          <text x="10" y="80">MID-EXPOSED</text>
+          <rect x="0" y="154" width="150" height="46" rx="2" fill="#12151a" stroke="#ff9d4d" stroke-opacity="0.55"/>
+          <text x="10" y="148">OVER-EXPOSED</text>
+
+          <!-- arrow -->
+          <path d="M160 109 L232 109" stroke="#3a3f46" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+          <!-- diffusion box -->
+          <rect x="238" y="60" width="150" height="98" rx="3" fill="#161a20" stroke="#3a3f46"/>
+          <text x="250" y="82" fill="#9aa2ad">DUAL CROSS-ATTN</text>
+          <text x="250" y="98" fill="#9aa2ad">LoRA DIFFUSION</text>
+          <text x="250" y="140" fill="#eef0f2" font-size="12">Base SDR Î_sdr</text>
+
+          <path d="M388 109 L458 109" stroke="#3a3f46" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+          <!-- HPGM box -->
+          <rect x="464" y="40" width="160" height="138" rx="3" fill="#161a20" stroke="#3a3f46"/>
+          <text x="476" y="62" fill="#9aa2ad">HPGM</text>
+          <text x="476" y="78" fill="#5c636c" font-size="9.5">HDR-prior guided</text>
+          <text x="476" y="92" fill="#5c636c" font-size="9.5">gain-map U-Net</text>
+          <g stroke="#ff9d4d" stroke-opacity="0.8" fill="none" stroke-width="1">
+            <ellipse cx="544" cy="135" rx="20" ry="8"/>
+            <ellipse cx="544" cy="135" rx="34" ry="15"/>
+            <ellipse cx="544" cy="135" rx="48" ry="22"/>
+          </g>
+          <text x="480" y="168" fill="#eef0f2" font-size="12">Gain map ĝ</text>
+
+          <path d="M624 109 L694 109" stroke="#3a3f46" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+          <!-- output -->
+          <rect x="700" y="60" width="180" height="98" rx="3" fill="#12151a" stroke="#ff9d4d" stroke-opacity="0.6"/>
+          <text x="712" y="82" fill="#9aa2ad">Î_hdr = (Î_sdr+ε)^ĝ · Q̂max − ε</text>
+          <text x="712" y="140" fill="#eef0f2" font-size="12">HDR output</text>
+        </g>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L6,3 L0,6 Z" fill="#3a3f46"/>
+          </marker>
+        </defs>
+      </svg>
+      <div class="cap"><span><b>Fig. 1 (recreated)</b> — Two-stage pipeline: base SDR synthesis, then HDR prior-guided gain map estimation.</span><span>3 LDR inputs → SDR + gain map + HDR</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="abstract">
+  <div class="wrap">
+    <span class="eyebrow">Abstract</span>
+    <h2 class="h">One pipeline, two consistent outputs</h2>
+    <div class="abstract-box">
+      We propose DOME-HDR, a dual-output multi-exposure HDR reconstruction framework that jointly produces a perceptually balanced SDR image and a consistent HDR image via gain map inverse tone mapping. Given three bracketed LDR inputs, DOME-HDR first synthesizes a base SDR using a LoRA-adapted latent diffusion model. A dual cross-attention fusion module injects complementary structural and color cues from the under- and over-exposed images while anchoring on the mid-exposure for stability. The synthesized SDR then guides HPGM, our HDR Prior-guided Gain Map network, to predict a spatially varying gain map for reliable dynamic-range expansion. Evaluated on Kalantari, Tel, and Challenge123 with both full-reference and no-reference metrics, DOME-HDR achieves state-of-the-art HDR reconstruction quality; ablations further confirm the effectiveness of dual cross-attention and SDR-guided gain map estimation.
+    </div>
+  </div>
+</section>
+
+<section id="method">
+  <div class="wrap">
+    <span class="eyebrow">Method</span>
+    <h2 class="h">Why split the problem in two</h2>
+    <p class="lede">Prior gain-map methods assume the input SDR already preserves scene structure — a gain map can only scale existing signal, never recover what saturation destroyed. DOME-HDR instead optimizes a strong SDR generator and a gain-map estimator jointly, so errors from one stage don't silently propagate into the other.</p>
+
+    <div class="pipeline">
+      <div class="stage">
+        <span class="num">STAGE 1</span>
+        <h3>Base SDR Synthesis</h3>
+        <p>Built on a LoRA-adapted UltraFusion backbone. The mid-exposure image anchors the diffusion latent for stability, while two independent cross-attention branches inject structural and color cues from the under- and over-exposed images — avoiding the information loss of naively averaging guidance features before attention.</p>
+        <div class="chipRow">
+          <span class="chip">LoRA rank 8, to_q / to_v</span>
+          <span class="chip">Dual cross-attention</span>
+          <span class="chip">RAFT-based ghost suppression</span>
+        </div>
+      </div>
+      <div class="stage">
+        <span class="num">STAGE 2</span>
+        <h3>HPGM — Prior-Guided Gain Map</h3>
+        <p>A U-Net conditioned on an 11-channel input: the synthesized SDR, cross-exposure ratios, and highlight/shadow saturation masks. An HDR prior built from all three exposures is injected at the bottleneck; the network predicts a residual over that prior plus a global HDR scale.</p>
+        <div class="chipRow">
+          <span class="chip">HDR prior construction</span>
+          <span class="chip">Edge-guided upsampling</span>
+          <span class="chip">Residual gain + global scale</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="eq"><span class="lbl">gain map definition</span>f(x,y) = ( H(x,y) + ε ) / ( S(x,y) + ε )</div>
+    <div class="eq"><span class="lbl">final reconstruction</span>Î_hdr(x,y) = ( Î_sdr(x,y) + ε )^ĝ(x,y) · Q̂max − ε</div>
+    <p class="lede" style="margin-top:22px;">Training runs in two phases: Phase 1 jointly trains the LoRA diffusion module and HPGM against ground-truth-anchored SDRs; Phase 2 re-optimizes HPGM on the model's own generated SDRs, closing the train/inference domain gap.</p>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <span class="eyebrow">Results</span>
+    <h2 class="h">HDR reconstruction — Challenge123 + Tel + Kalantari</h2>
+    <p class="lede">Full-reference and no-reference metrics, combined test splits across all three benchmarks. Best per column in orange.</p>
+
+    <div class="tableScroll">
+      <table>
+        <thead><tr>
+          <th>Method</th><th>PU-PSNR ↑</th><th>PU-SSIM ↑</th><th>LPIPS ↓</th><th>DISTS ↓</th><th>CLIPIQA ↑</th><th>NIQE ↓</th><th>BRISQUE ↓</th>
+        </tr></thead>
+        <tbody>
+          <tr><td>AHDRNet</td><td>41.99</td><td>0.9780</td><td>0.0438</td><td>0.0309</td><td>0.3963</td><td>3.61</td><td>24.78</td></tr>
+          <tr><td>HDR-GAN</td><td>42.74</td><td>0.9782</td><td>0.0457</td><td>0.0286</td><td>0.3957</td><td>3.61</td><td>25.23</td></tr>
+          <tr><td>HDR-Transformer</td><td>43.74</td><td>0.9806</td><td>0.0382</td><td>0.0232</td><td>0.3982</td><td>3.62</td><td>24.12</td></tr>
+          <tr><td>SCTNet</td><td>42.92</td><td>0.9783</td><td>0.0399</td><td>0.0246</td><td>0.3959</td><td>3.56</td><td>23.84</td></tr>
+          <tr><td>SAFNet</td><td>42.98</td><td>0.9802</td><td>0.0344</td><td>0.0213</td><td>0.4019</td><td>3.63</td><td>23.12</td></tr>
+          <tr><td>DiffHDR</td><td>42.50</td><td>0.9739</td><td>0.0464</td><td>0.0297</td><td>0.4101</td><td>3.86</td><td>26.15</td></tr>
+          <tr><td>RFG-HDR</td><td>43.16</td><td>0.9788</td><td>0.0367</td><td>0.0239</td><td>0.3927</td><td>3.59</td><td>23.98</td></tr>
+          <tr><td>AFUNet</td><td>44.48</td><td>0.9875</td><td>0.0205</td><td>0.0162</td><td>0.3983</td><td>3.68</td><td>27.13</td></tr>
+          <tr class="best"><td>Ours</td><td>44.63</td><td>0.9878</td><td>0.0156</td><td>0.0147</td><td>0.4137</td><td>3.56</td><td>22.18</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="tblnote">No-reference metrics computed on µ-law tone-mapped HDR images for fair comparison across methods.</p>
+
+    <h2 class="h" style="margin-top:56px;">Multi-exposure fusion — no-reference quality</h2>
+    <p class="lede">All methods take the same three exposure images as input to produce a fused SDR. DOME-HDR retains UltraFusion's fusion strength while adding HDR output.</p>
+    <div class="tableScroll">
+      <table style="min-width:420px;">
+        <thead><tr><th>Method</th><th>MANIQA ↑</th><th>CLIPIQA ↑</th><th>NIQE ↓</th><th>BRISQUE ↓</th></tr></thead>
+        <tbody>
+          <tr><td>MEF-LUT</td><td>0.3650</td><td>0.4070</td><td>3.92</td><td>36.53</td></tr>
+          <tr><td>UltraFusion</td><td>0.4064</td><td>0.5147</td><td>3.34</td><td>17.01</td></tr>
+          <tr class="best"><td>Ours</td><td>0.4129</td><td>0.5233</td><td>3.37</td><td>16.52</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="h" style="margin-top:56px;">Skipping the tone-mapping lottery</h2>
+    <p class="lede">Conventional HDR pipelines need a tone mapping operator for display, and perceptual quality swings with the operator chosen. Because DOME-HDR emits a display-ready SDR directly from Stage 1, it sidesteps that variance entirely.</p>
+    <div class="tableScroll">
+      <table style="min-width:760px;">
+        <thead><tr><th>Metric</th><th>AFUNet (µ-law)</th><th>AFUNet (PQ)</th><th>SCTNet (µ-law)</th><th>SAFNet (µ-law)</th><th>Ours (MEF)</th></tr></thead>
+        <tbody>
+          <tr><td>CLIPIQA ↑</td><td>0.3894</td><td>0.3590</td><td>0.3984</td><td>0.3964</td><td class="mono" style="color:var(--over);">0.4984</td></tr>
+          <tr><td>NIQE ↓</td><td>3.66</td><td>3.97</td><td>3.61</td><td>3.55</td><td class="mono" style="color:var(--over);">3.53</td></tr>
+          <tr><td>BRISQUE ↓</td><td>26.39</td><td>30.11</td><td>22.65</td><td>23.36</td><td class="mono" style="color:var(--over);">19.88</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="ablations">
+  <div class="wrap">
+    <span class="eyebrow">Ablations</span>
+    <h2 class="h">What each design choice earns</h2>
+    <div class="ablGrid">
+      <div class="ablCard">
+        <h4>Joint training vs. cascade</h4>
+        <p>Feeding a pretrained UltraFusion SDR into a pretrained GMNet, with no joint optimization, collapses quality; naively training both modules jointly from scratch is worse still, due to conflicting SDR/HDR gradients.</p>
+        <span class="stat">PU-PSNR: 13.82 (naive joint) → 22.96 (cascade) → 44.63 (ours)</span>
+      </div>
+      <div class="ablCard">
+        <h4>Dual cross-attention</h4>
+        <p>Separate attention branches for under- and over-exposed guidance outperform UltraFusion's normalized-summation fusion across every metric.</p>
+        <span class="stat">LPIPS 0.0180 → 0.0156, DISTS 0.0157 → 0.0147</span>
+      </div>
+      <div class="ablCard">
+        <h4>HDR prior inputs</h4>
+        <p>Gain estimation from the SDR alone is weak; adding either the under- or over-exposed image helps, but only all three exposures give reliable radiometric coverage.</p>
+        <span class="stat">PU-PSNR: 23.69 (SDR only) → 44.63 (all three)</span>
+      </div>
+      <div class="ablCard">
+        <h4>Two-phase training</h4>
+        <p>Phase 1 alone gives a strong initialization; Phase 2 alone sharpens perceptual metrics on generated SDRs. Combined, the model surpasses AFUNet on nearly every metric.</p>
+        <span class="stat">PU-PSNR: 40.53 (P1) / 43.26 (P2) / 44.63 (P1+P2)</span>
+      </div>
+    </div>
+
+    <div class="noteBox">
+      <b style="color:var(--ink);">Limitation.</b> Reconstruction quality is bounded by how reliable the exposure cues are: severe motion, large saturated regions, or complex illumination can degrade the fused SDR and, downstream, the gain estimate — so recovering extreme radiance variations in those regions remains difficult. The authors point to more expressive exposure representations as future work.
+    </div>
+  </div>
+</section>
+
+<section id="bibtex" style="border-bottom:none;">
+  <div class="wrap">
+    <span class="eyebrow">Cite this work</span>
+    <h2 class="h">BibTeX</h2>
+    <div class="bibtex" id="bibtexBlock">
+<button class="copyBtn" onclick="navigator.clipboard.writeText(document.getElementById('bibtexRaw').textContent); this.textContent='Copied'; setTimeout(()=>this.textContent='Copy',1500);">Copy</button>
+<span id="bibtexRaw">@inproceedings{kim2026domehdr,
+  title     = {Dual-Output Multi-Exposure {HDR} Reconstruction via {SDR} Fusion and Gain Map Inverse Tone Mapping},
+  author    = {Kim, Jinho and Kim, Jinwoo and Kim, Seon Joo},
+  booktitle = {European Conference on Computer Vision (ECCV)},
+  year      = {2026}
+}</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Yonsei University, Republic of Korea</p>
+    <p>Supported by the AI Graduate School Program (Yonsei University), Samsung Research Funding &amp; Incubation Center, and IITP grants funded by the Korea government (MSIT).</p>
+    <p style="margin-top:18px;">This page is a project page template generated from the paper PDF — replace the Paper / Code / arXiv links above with the final URLs before publishing.</p>
+  </div>
+</footer>
+
+</body>
+</html>
